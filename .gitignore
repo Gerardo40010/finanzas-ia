@@ -1,3 +1,61 @@
-"node_modules/" 
-"dist/" 
-"*.log" 
+# ============================================
+# FINANZAS IA - .gitignore
+# No subir node_modules ni archivos innecesarios
+# ============================================
+
+# Dependencias
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Builds
+dist/
+build/
+.vite/
+backend/dist/
+frontend/dist/
+
+# Base de datos (subir o no? decide tú)
+database/*.db
+database/*.db-journal
+!database/.gitkeep
+
+# Variables de entorno
+.env
+.env.local
+.env.production
+backend/.env
+frontend/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+backend/logs/
+frontend/logs/
+
+# Sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Archivos temporales
+*.tmp
+*.temp
+*.cache
