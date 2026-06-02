@@ -6,37 +6,51 @@ import { validateTransaction, validateField, getAllCategories } from '../utils/v
 import { toast } from 'react-hot-toast';
 import Skeleton from '../components/ui/Skeleton';
 
+/* ─── category icons ─────────────────────────────── */
+const CATEGORY_ICONS: Record<string, string> = {
+  alimentacion: '🍎', transporte: '🚗', ocio: '🎬', salario: '💰',
+  suscripciones: '📺', salud: '🏥', educacion: '📚', extra: '✨',
+  inversion: '📈', regalo: '🎁', servicios: '💡', otros: '📦',
+};
+
+const getIcon = (cat: string) => CATEGORY_ICONS[cat] || '📌';
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+/* ─── small sub-components ───────────────────────── */
+const FormField: React.FC<{
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}> = ({ label, error, children }) => (
+  <div style={{ marginBottom: '1.125rem' }}>
+    <label className="input-label">{label}</label>
+    {children}
+    {error && <p className="input-error">⚠ {error}</p>}
+  </div>
+);
+
+/* ─── component ──────────────────────────────────── */
 const TransactionsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateTransactionDTO>({
-    description: '',
-    amount: 0,
-    type: 'expense',
-    category: '',
-    date: new Date().toISOString().split('T')[0]
+    description: '', amount: 0, type: 'expense', category: '',
+    date: new Date().toISOString().split('T')[0],
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  
-  const [activeFilters, setActiveFilters] = useState({
-    type: 'all',
-    category: 'all',
-    startDate: '',
-    endDate: ''
-  });
+  const [activeFilters, setActiveFilters] = useState({ type: 'all', category: 'all', startDate: '', endDate: '' });
 
-  useEffect(() => {
-    loadAllTransactions();
-  }, []);
+  useEffect(() => { loadAllTransactions(); }, []);
 
   const loadAllTransactions = async () => {
     try {
-      const transactionsFromApi = await transactionService.getAll();
-      const transactionData = transactionsFromApi;
-      setTransactions(transactionData);
-    } catch (apiError) {
+      const data = await transactionService.getAll();
+      setTransactions(data);
+    } catch {
       toast.error('Error al cargar transacciones');
     } finally {
       setIsLoading(false);
@@ -44,452 +58,321 @@ const TransactionsPage: React.FC = () => {
   };
 
   const handleFieldBlur = (fieldName: string, fieldValue: string | number) => {
-    const validationErrorMessage = validateField(fieldName, fieldValue, formData.type);
-    setFieldErrors(previousErrors => ({ ...previousErrors, [fieldName]: validationErrorMessage || '' }));
+    const err = validateField(fieldName, fieldValue, formData.type);
+    setFieldErrors(prev => ({ ...prev, [fieldName]: err || '' }));
   };
 
-  const handleFormSubmit = async (formEvent: React.FormEvent) => {
-    formEvent.preventDefault();
-    
-    const validationErrors = validateTransaction(formData);
-    if (validationErrors.length > 0) {
-      const errorsGroupedByField: Record<string, string> = {};
-      validationErrors.forEach(singleError => {
-        if (singleError.includes('descripcion')) errorsGroupedByField.description = singleError;
-        if (singleError.includes('monto')) errorsGroupedByField.amount = singleError;
-        if (singleError.includes('categoria')) errorsGroupedByField.category = singleError;
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors = validateTransaction(formData);
+    if (errors.length > 0) {
+      const grouped: Record<string, string> = {};
+      errors.forEach(err => {
+        if (err.includes('descripcion')) grouped.description = err;
+        if (err.includes('monto')) grouped.amount = err;
+        if (err.includes('categoria')) grouped.category = err;
       });
-      setFieldErrors(errorsGroupedByField);
+      setFieldErrors(grouped);
       toast.error('Por favor corrige los errores');
       return;
     }
-    
     try {
       if (editingTransactionId) {
         await transactionService.update(editingTransactionId, formData);
-        toast.success('Transaccion actualizada');
+        toast.success('Transacción actualizada');
       } else {
         await transactionService.create(formData);
-        toast.success('Transaccion creada');
+        toast.success('Transacción creada');
       }
       setIsModalOpen(false);
-      resetFormFields();
+      resetForm();
       loadAllTransactions();
-    } catch (apiError) {
-      toast.error('Error al guardar transaccion');
+    } catch {
+      toast.error('Error al guardar transacción');
     }
   };
 
-  const handleDeleteTransaction = async (transactionId: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      await transactionService.delete(transactionId);
-      toast.success('Transaccion eliminada');
+      await transactionService.delete(id);
+      toast.success('Transacción eliminada');
       loadAllTransactions();
-    } catch (apiError) {
-      toast.error('Error al eliminar transaccion');
+    } catch {
+      toast.error('Error al eliminar transacción');
     }
   };
 
-  const handleEditTransaction = (transactionToEdit: Transaction) => {
+  const handleEdit = (t: Transaction) => {
     setFormData({
-      description: transactionToEdit.description,
-      amount: transactionToEdit.amount,
-      type: transactionToEdit.type,
-      category: transactionToEdit.category,
-      date: transactionToEdit.date.split('T')[0]
+      description: t.description, amount: t.amount, type: t.type,
+      category: t.category, date: t.date.split('T')[0],
     });
-    setEditingTransactionId(transactionToEdit.id);
+    setEditingTransactionId(t.id);
     setIsModalOpen(true);
   };
 
-  const resetFormFields = () => {
-    setFormData({
-      description: '',
-      amount: 0,
-      type: 'expense',
-      category: '',
-      date: new Date().toISOString().split('T')[0]
-    });
+  const resetForm = () => {
+    setFormData({ description: '', amount: 0, type: 'expense', category: '', date: new Date().toISOString().split('T')[0] });
     setEditingTransactionId(null);
     setFieldErrors({});
   };
 
-  const getFilteredTransactionList = () => {
-    return transactions.filter(singleTransaction => {
-      if (activeFilters.type !== 'all' && singleTransaction.type !== activeFilters.type) return false;
-      if (activeFilters.category !== 'all' && singleTransaction.category !== activeFilters.category) return false;
-      if (activeFilters.startDate && new Date(singleTransaction.date) < new Date(activeFilters.startDate)) return false;
-      if (activeFilters.endDate && new Date(singleTransaction.date) > new Date(activeFilters.endDate)) return false;
-      return true;
-    });
-  };
+  const filtered = transactions.filter(t => {
+    if (activeFilters.type !== 'all' && t.type !== activeFilters.type) return false;
+    if (activeFilters.category !== 'all' && t.category !== activeFilters.category) return false;
+    if (activeFilters.startDate && new Date(t.date) < new Date(activeFilters.startDate)) return false;
+    if (activeFilters.endDate && new Date(t.date) > new Date(activeFilters.endDate)) return false;
+    return true;
+  });
 
-  const filteredTransactions = getFilteredTransactionList();
-
-  const exportTransactionsToCSV = () => {
-    const csvHeaders = ['Fecha', 'Descripcion', 'Categoria', 'Tipo', 'Monto (Bs)'];
-    const csvRows = filteredTransactions.map(singleTransaction => [
-      new Date(singleTransaction.date).toLocaleDateString('es-BO'),
-      singleTransaction.description,
-      singleTransaction.category,
-      singleTransaction.type === 'income' ? 'Ingreso' : 'Gasto',
-      singleTransaction.amount.toString()
+  const exportCSV = () => {
+    const headers = ['Fecha', 'Descripcion', 'Categoria', 'Tipo', 'Monto (Bs)'];
+    const rows = filtered.map(t => [
+      new Date(t.date).toLocaleDateString('es-BO'),
+      t.description, t.category,
+      t.type === 'income' ? 'Ingreso' : 'Gasto',
+      t.amount.toString(),
     ]);
-    
-    const csvFileContent = [csvHeaders, ...csvRows]
-      .map(row => row.join(','))
-      .join('\n');
-    
-    const csvBlob = new Blob(['\uFEFF' + csvFileContent], { type: 'text/csv;charset=utf-8;' });
-    const downloadLink = document.createElement('a');
-    const blobUrl = URL.createObjectURL(csvBlob);
-    downloadLink.href = blobUrl;
-    downloadLink.setAttribute('download', `transacciones_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(blobUrl);
-    
-    toast.success(`${filteredTransactions.length} transacciones exportadas`);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `transacciones_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    toast.success(`${filtered.length} transacciones exportadas`);
   };
 
-  const totalIncomeAmount = filteredTransactions
-    .filter(singleTransaction => singleTransaction.type === 'income')
-    .reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
-  
-  const totalExpensesAmount = filteredTransactions
-    .filter(singleTransaction => singleTransaction.type === 'expense')
-    .reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
+  const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const totalExpense = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const categoryOptions = getAllCategories().map(c => ({ value: c, label: c }));
+  const uniqueCategories = ['all', ...new Set(transactions.map(t => t.category))];
 
-  const availableCategoryOptions = getAllCategories().map(categoryName => ({ value: categoryName, label: categoryName }));
-  const uniqueCategoryNames = ['all', ...new Set(transactions.map(singleTransaction => singleTransaction.category))];
-
-  const getIconForCategory = (categoryName: string): string => {
-    const categoryIcons: Record<string, string> = {
-      alimentacion: '🍎', transporte: '🚗', ocio: '🎬', salario: '💰',
-      suscripciones: '📺', salud: '🏥', educacion: '📚', extra: '✨',
-      inversion: '📈', regalo: '🎁', servicios: '💡', otros: '📦'
-    };
-    return categoryIcons[categoryName] || '📌';
-  };
-
-  const formatTransactionDate = (dateString: string) => {
-    const transactionDate = new Date(dateString);
-    return transactionDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-  };
-
+  /* ── skeleton ─────────────────────────── */
   if (isLoading) {
     return (
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <Skeleton width="250px" height="40px" />
-        <Skeleton width="180px" height="20px" marginTop="8px" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', marginTop: '24px' }}>
-          <Skeleton height="100px" />
-          <Skeleton height="100px" />
+        <Skeleton width="220px" height="36px" />
+        <Skeleton width="180px" height="18px" marginTop="10px" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '18px', marginTop: '28px' }}>
+          <Skeleton height="96px" /><Skeleton height="96px" />
         </div>
-        <Skeleton height="60px" marginTop="24px" />
-        <Skeleton height="400px" marginTop="16px" />
+        <Skeleton height="56px" marginTop="24px" />
+        <Skeleton height="380px" marginTop="16px" />
       </div>
     );
   }
 
+  /* ── select style helper ──────────────── */
+  const selectStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.6rem 0.875rem',
+    border: '1.5px solid var(--border-color)',
+    borderRadius: 'var(--radius-lg)',
+    fontSize: '0.875rem',
+    background: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-sans)',
+    cursor: 'pointer',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    outline: 'none',
+    transition: 'border-color 150ms ease, box-shadow 150ms ease',
+  };
+
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ 
-          fontSize: '2rem', 
-          fontWeight: '700', 
-          background: 'linear-gradient(135deg, var(--primary-600), var(--primary-800))',
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          color: 'transparent'
-        }}>
-          Transacciones
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
-          Gestiona tus ingresos y gastos de forma inteligente
-        </p>
+
+      {/* ── Page header ─────────────────────────────── */}
+      <div style={{ marginBottom: '2.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h1 style={{
+            fontSize: 'clamp(1.6rem, 3vw, 2.1rem)',
+            fontWeight: 700, letterSpacing: '-0.03em',
+            color: 'var(--text-primary)', lineHeight: 1.1,
+          }}>
+            Transacciones
+          </h1>
+          <p style={{ color: 'var(--text-tertiary)', marginTop: '0.5rem', fontSize: '0.9375rem' }}>
+            Gestiona tus ingresos y gastos de forma inteligente
+          </p>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => { resetForm(); setIsModalOpen(true); }}
+        >
+          + Nueva transacción
+        </button>
       </div>
 
-      {/* Filtros */}
-      <div style={{ 
-        background: 'var(--bg-primary)', 
-        borderRadius: '24px', 
-        padding: '20px', 
-        marginBottom: '24px', 
-        boxShadow: 'var(--shadow-sm)',
-        border: '1px solid var(--border-color)'
-      }}>
-        <h3 style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '16px', color: 'var(--text-primary)' }}>
-          Filtrar transacciones
-        </h3>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1, minWidth: '120px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>Tipo</label>
-            <select 
-              style={{ 
-                width: '100%', 
-                padding: '8px 12px', 
-                border: '2px solid var(--border-color)', 
-                borderRadius: '12px', 
-                fontSize: '0.875rem',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
-              }}
-              value={activeFilters.type}
-              onChange={(event) => setActiveFilters({...activeFilters, type: event.target.value})}
-            >
+      {/* ── KPI mini-cards ───────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{
+          background: 'var(--success-muted)',
+          border: '1px solid rgba(0,200,150,0.2)',
+          borderRadius: 'var(--radius-xl)',
+          padding: '1.125rem 1.375rem',
+        }}>
+          <p style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--success)', opacity: 0.8, marginBottom: '4px' }}>
+            Total ingresos
+          </p>
+          <p style={{ fontSize: '1.625rem', fontWeight: 700, letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)', color: 'var(--success)' }}>
+            {formatCurrency(totalIncome)}
+          </p>
+        </div>
+        <div style={{
+          background: 'var(--danger-muted)',
+          border: '1px solid rgba(255,71,87,0.2)',
+          borderRadius: 'var(--radius-xl)',
+          padding: '1.125rem 1.375rem',
+        }}>
+          <p style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--danger)', opacity: 0.8, marginBottom: '4px' }}>
+            Total gastos
+          </p>
+          <p style={{ fontSize: '1.625rem', fontWeight: 700, letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)', color: 'var(--danger)' }}>
+            {formatCurrency(totalExpense)}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Filters ─────────────────────────────────── */}
+      <div className="card" style={{ padding: '1.125rem 1.375rem', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+          <div style={{ flex: 1, minWidth: '110px' }}>
+            <label className="input-label">Tipo</label>
+            <select style={selectStyle} value={activeFilters.type}
+              onChange={e => setActiveFilters({ ...activeFilters, type: e.target.value })}>
               <option value="all">Todos</option>
               <option value="income">Ingresos</option>
               <option value="expense">Gastos</option>
             </select>
           </div>
-          
-          <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>Categoria</label>
-            <select 
-              style={{ 
-                width: '100%', 
-                padding: '8px 12px', 
-                border: '2px solid var(--border-color)', 
-                borderRadius: '12px', 
-                fontSize: '0.875rem',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
-              }}
-              value={activeFilters.category}
-              onChange={(event) => setActiveFilters({...activeFilters, category: event.target.value})}
-            >
-              {uniqueCategoryNames.map(categoryName => (
-                <option key={categoryName} value={categoryName}>{categoryName === 'all' ? 'Todas' : categoryName}</option>
+
+          <div style={{ flex: 1.4, minWidth: '130px' }}>
+            <label className="input-label">Categoría</label>
+            <select style={selectStyle} value={activeFilters.category}
+              onChange={e => setActiveFilters({ ...activeFilters, category: e.target.value })}>
+              {uniqueCategories.map(c => (
+                <option key={c} value={c}>{c === 'all' ? 'Todas' : c}</option>
               ))}
             </select>
           </div>
-          
-          <div style={{ flex: 1, minWidth: '130px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>Desde</label>
-            <input
-              type="date"
-              style={{ 
-                width: '100%', 
-                padding: '8px 12px', 
-                border: '2px solid var(--border-color)', 
-                borderRadius: '12px', 
-                fontSize: '0.875rem',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
-              }}
+
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label className="input-label">Desde</label>
+            <input type="date" style={{ ...selectStyle, cursor: 'text' }}
               value={activeFilters.startDate}
-              onChange={(event) => setActiveFilters({...activeFilters, startDate: event.target.value})}
-            />
+              onChange={e => setActiveFilters({ ...activeFilters, startDate: e.target.value })} />
           </div>
-          
-          <div style={{ flex: 1, minWidth: '130px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '4px' }}>Hasta</label>
-            <input
-              type="date"
-              style={{ 
-                width: '100%', 
-                padding: '8px 12px', 
-                border: '2px solid var(--border-color)', 
-                borderRadius: '12px', 
-                fontSize: '0.875rem',
-                background: 'var(--bg-primary)',
-                color: 'var(--text-primary)'
-              }}
+
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <label className="input-label">Hasta</label>
+            <input type="date" style={{ ...selectStyle, cursor: 'text' }}
               value={activeFilters.endDate}
-              onChange={(event) => setActiveFilters({...activeFilters, endDate: event.target.value})}
-            />
+              onChange={e => setActiveFilters({ ...activeFilters, endDate: e.target.value })} />
           </div>
-          
-          <button 
-            style={{ 
-              padding: '8px 16px', 
-              height: '38px', 
-              background: 'var(--gray-200)', 
-              border: 'none', 
-              borderRadius: '12px', 
-              cursor: 'pointer', 
-              fontWeight: '500',
-              color: 'var(--text-primary)'
-            }}
-            onClick={() => setActiveFilters({type: 'all', category: 'all', startDate: '', endDate: ''})}
+
+          <button
+            className="btn btn-ghost"
+            style={{ alignSelf: 'flex-end', fontSize: '0.8125rem' }}
+            onClick={() => setActiveFilters({ type: 'all', category: 'all', startDate: '', endDate: '' })}
           >
             Limpiar
           </button>
         </div>
       </div>
 
-      {/* Tarjetas de resumen */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', marginBottom: '24px' }}>
-        <div style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', borderRadius: '20px', padding: '16px' }}>
-          <div style={{ fontSize: '0.75rem', color: '#065f46', marginBottom: '4px' }}>Total Ingresos</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#059669' }}>
-            {formatCurrency(totalIncomeAmount)}
-          </div>
-        </div>
-        <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', borderRadius: '20px', padding: '16px' }}>
-          <div style={{ fontSize: '0.75rem', color: '#991b1b', marginBottom: '4px' }}>Total Gastos</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#dc2626' }}>
-            {formatCurrency(totalExpensesAmount)}
-          </div>
-        </div>
-      </div>
-
-      {/* Lista de transacciones */}
-      <div style={{ 
-        background: 'var(--bg-primary)', 
-        borderRadius: '24px', 
-        overflow: 'hidden', 
-        boxShadow: 'var(--shadow-sm)',
-        border: '1px solid var(--border-color)'
-      }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          padding: '20px 24px',
+      {/* ── Transaction list ─────────────────────────── */}
+      <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
+        {/* list header */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '1rem 1.375rem',
           borderBottom: '1px solid var(--border-color)',
-          flexWrap: 'wrap',
-          gap: '12px'
+          flexWrap: 'wrap', gap: '0.75rem',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-primary)' }}>
-              Historial de Transacciones
-              <span style={{ marginLeft: '8px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                ({filteredTransactions.length})
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
+              Historial
             </h2>
+            <span style={{
+              background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
+              borderRadius: '999px', padding: '2px 9px',
+              fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)',
+            }}>
+              {filtered.length}
+            </span>
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button 
-              onClick={exportTransactionsToCSV} 
-              style={{ 
-                padding: '8px 20px', 
-                background: 'var(--gray-200)', 
-                border: 'none', 
-                borderRadius: '8px', 
-                cursor: 'pointer', 
-                fontWeight: '500',
-                color: 'var(--text-primary)',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(event) => event.currentTarget.style.background = 'var(--gray-300)'}
-              onMouseLeave={(event) => event.currentTarget.style.background = 'var(--gray-200)'}
-            >
-              Exportar CSV
-            </button>
-            <button 
-              onClick={() => { resetFormFields(); setIsModalOpen(true); }}
-              style={{ 
-                padding: '8px 20px', 
-                background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '8px', 
-                cursor: 'pointer', 
-                fontWeight: '500',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(event) => event.currentTarget.style.opacity = '0.9'}
-              onMouseLeave={(event) => event.currentTarget.style.opacity = '1'}
-            >
-              Nueva Transaccion
-            </button>
-          </div>
+          <button className="btn btn-secondary" onClick={exportCSV} style={{ fontSize: '0.8125rem' }}>
+            ↓ Exportar CSV
+          </button>
         </div>
 
-        {filteredTransactions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-tertiary)' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
-            <p>No hay transacciones que coincidan con los filtros</p>
+        {/* rows */}
+        {filtered.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-state-icon">📭</span>
+            <p style={{ fontSize: '0.9rem', fontWeight: 500 }}>No hay transacciones</p>
+            <p style={{ fontSize: '0.8rem' }}>Prueba ajustando los filtros</p>
           </div>
         ) : (
           <div>
-            {filteredTransactions.map(singleTransaction => (
-              <div 
-                key={singleTransaction.id} 
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '16px 24px',
-                  borderBottom: '1px solid var(--border-color)',
-                  transition: 'all 0.2s',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(event) => event.currentTarget.style.background = 'var(--gray-100)'}
-                onMouseLeave={(event) => event.currentTarget.style.background = 'transparent'}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '12px',
-                    background: singleTransaction.type === 'income' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.25rem'
-                  }}>
-                    {getIconForCategory(singleTransaction.category)}
+            {filtered.map(t => (
+              <div key={t.id} className="transaction-item">
+                {/* left */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', minWidth: 0 }}>
+                  <div className={`category-icon category-icon-${t.type}`}>
+                    {getIcon(t.category)}
                   </div>
-                  <div>
-                    <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                      {singleTransaction.description}
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-                      <span style={{ textTransform: 'capitalize' }}>{singleTransaction.category}</span>
-                      <span>•</span>
-                      <span>{formatTransactionDate(singleTransaction.date)}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{
+                      fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {t.description}
+                    </p>
+                    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: '2px', alignItems: 'center' }}>
+                      <span className="pill" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', padding: '1px 6px', fontSize: '0.7rem' }}>
+                        {t.category}
+                      </span>
+                      <span>·</span>
+                      <span>{fmtDate(t.date)}</span>
                     </div>
                   </div>
                 </div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ 
-                    fontWeight: '700', 
-                    fontSize: '0.875rem',
-                    color: singleTransaction.type === 'income' ? 'var(--success)' : 'var(--danger)'
+
+                {/* right */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexShrink: 0 }}>
+                  <p style={{
+                    fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem',
+                    color: t.type === 'income' ? 'var(--success)' : 'var(--danger)',
+                    minWidth: '90px', textAlign: 'right',
                   }}>
-                    {singleTransaction.type === 'expense' ? '-' : '+'} {formatCurrency(singleTransaction.amount)}
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {t.type === 'expense' ? '−' : '+'} {formatCurrency(t.amount)}
+                  </p>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      onClick={() => handleEditTransaction(singleTransaction)}
-                      style={{
-                        background: 'var(--primary-500)',
-                        border: 'none',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: 'white',
-                        fontWeight: 500,
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={(event) => event.currentTarget.style.background = 'var(--primary-600)'}
-                      onMouseLeave={(event) => event.currentTarget.style.background = 'var(--primary-500)'}
+                      className="btn btn-ghost"
+                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', borderRadius: 'var(--radius-md)' }}
+                      onClick={() => handleEdit(t)}
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => handleDeleteTransaction(singleTransaction.id)}
+                      onClick={() => handleDelete(t.id)}
                       style={{
-                        background: 'var(--danger)',
-                        border: 'none',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: 'white',
-                        fontWeight: 500,
-                        transition: 'all 0.2s'
+                        padding: '0.35rem 0.75rem', fontSize: '0.78rem',
+                        borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+                        background: 'var(--danger-muted)', color: 'var(--danger)',
+                        fontFamily: 'var(--font-sans)', fontWeight: 600,
+                        transition: 'all 150ms ease',
                       }}
-                      onMouseEnter={(event) => event.currentTarget.style.background = 'var(--danger-dark)'}
-                      onMouseLeave={(event) => event.currentTarget.style.background = 'var(--danger)'}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger)'; e.currentTarget.style.color = 'white'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--danger-muted)'; e.currentTarget.style.color = 'var(--danger)'; }}
                     >
                       Eliminar
                     </button>
@@ -501,212 +384,144 @@ const TransactionsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* ── Modal ───────────────────────────────────── */}
       {isModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.6)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }} onClick={() => setIsModalOpen(false)}>
-          <div style={{
-            background: 'var(--bg-primary)',
-            borderRadius: '32px',
-            maxWidth: '500px',
-            width: '90%',
-            maxHeight: '85vh',
-            overflowY: 'auto',
-            animation: 'modalIn 0.3s ease',
-            border: '1px solid var(--border-color)'
-          }} onClick={(event) => event.stopPropagation()}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              padding: '20px 24px',
-              borderBottom: '1px solid var(--border-color)'
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+
+            {/* modal header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '1.375rem 1.5rem',
+              borderBottom: '1px solid var(--border-color)',
             }}>
-              <h2 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text-primary)' }}>
-                {editingTransactionId ? 'Editar Transaccion' : 'Nueva Transaccion'}
-              </h2>
+              <div>
+                <h2 style={{ fontSize: '1.0625rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+                  {editingTransactionId ? 'Editar transacción' : 'Nueva transacción'}
+                </h2>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                  {editingTransactionId ? 'Modifica los datos de la transacción' : 'Registra un ingreso o gasto'}
+                </p>
+              </div>
               <button
                 onClick={() => setIsModalOpen(false)}
                 style={{
-                  background: 'var(--gray-200)',
-                  border: 'none',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '1.125rem',
-                  color: 'var(--text-primary)'
+                  width: 32, height: 32, borderRadius: 10,
+                  border: '1.5px solid var(--border-color)',
+                  background: 'var(--bg-tertiary)', cursor: 'pointer',
+                  fontSize: '1.1rem', color: 'var(--text-secondary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 150ms ease',
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger-muted)'; e.currentTarget.style.borderColor = 'var(--danger)'; e.currentTarget.style.color = 'var(--danger)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
               >
                 ×
               </button>
             </div>
-            
+
+            {/* modal body */}
             <form onSubmit={handleFormSubmit}>
-              <div style={{ padding: '20px 24px' }}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Descripcion</label>
+              <div style={{ padding: '1.375rem 1.5rem' }}>
+
+                <FormField label="Descripción" error={fieldErrors.description}>
                   <input
+                    className={`input-field ${fieldErrors.description ? 'error' : ''}`}
                     type="text"
-                    style={{ 
-                      width: '100%', 
-                      padding: '12px 16px', 
-                      border: `2px solid ${fieldErrors.description ? 'var(--danger)' : 'var(--border-color)'}`,
-                      borderRadius: '16px',
-                      fontSize: '0.875rem',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)'
-                    }}
                     value={formData.description}
-                    onChange={(event) => setFormData({ ...formData, description: event.target.value })}
-                    onBlur={(event) => handleFieldBlur('description', event.target.value)}
                     placeholder="Ej: Compra supermercado"
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    onBlur={e => handleFieldBlur('description', e.target.value)}
                   />
-                  {fieldErrors.description && (
-                    <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {fieldErrors.description}
-                    </small>
-                  )}
-                </div>
+                </FormField>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Monto (Bs)</label>
+                <FormField label="Monto (Bs)" error={fieldErrors.amount}>
                   <input
+                    className={`input-field ${fieldErrors.amount ? 'error' : ''}`}
                     type="number"
-                    style={{ 
-                      width: '100%', 
-                      padding: '12px 16px', 
-                      border: `2px solid ${fieldErrors.amount ? 'var(--danger)' : 'var(--border-color)'}`,
-                      borderRadius: '16px',
-                      fontSize: '0.875rem',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)'
-                    }}
                     value={formData.amount}
-                    onChange={(event) => setFormData({ ...formData, amount: parseFloat(event.target.value) })}
-                    onBlur={(event) => handleFieldBlur('amount', parseFloat(event.target.value))}
                     placeholder="0"
+                    onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                    onBlur={e => handleFieldBlur('amount', parseFloat(e.target.value))}
                   />
-                  {fieldErrors.amount && (
-                    <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {fieldErrors.amount}
-                    </small>
-                  )}
-                </div>
+                </FormField>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Tipo</label>
-                  <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-primary)' }}>
-                      <input
-                        type="radio"
-                        value="expense"
-                        checked={formData.type === 'expense'}
-                        onChange={() => setFormData({ ...formData, type: 'expense', category: '' })}
-                      />
-                      <span>Gasto</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-primary)' }}>
-                      <input
-                        type="radio"
-                        value="income"
-                        checked={formData.type === 'income'}
-                        onChange={() => setFormData({ ...formData, type: 'income', category: '' })}
-                      />
-                      <span>Ingreso</span>
-                    </label>
+                {/* Type toggle */}
+                <FormField label="Tipo">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {(['expense', 'income'] as const).map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, type, category: '' })}
+                        style={{
+                          padding: '0.625rem',
+                          borderRadius: 'var(--radius-lg)',
+                          border: `1.5px solid ${formData.type === type
+                            ? (type === 'income' ? 'var(--success)' : 'var(--danger)')
+                            : 'var(--border-color)'}`,
+                          background: formData.type === type
+                            ? (type === 'income' ? 'var(--success-muted)' : 'var(--danger-muted)')
+                            : 'var(--bg-tertiary)',
+                          color: formData.type === type
+                            ? (type === 'income' ? 'var(--success)' : 'var(--danger)')
+                            : 'var(--text-secondary)',
+                          fontFamily: 'var(--font-sans)',
+                          fontWeight: 600, fontSize: '0.875rem',
+                          cursor: 'pointer', transition: 'all 150ms ease',
+                        }}
+                      >
+                        {type === 'income' ? '↑ Ingreso' : '↓ Gasto'}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                </FormField>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Categoria</label>
+                <FormField label="Categoría" error={fieldErrors.category}>
                   <select
-                    style={{ 
-                      width: '100%', 
-                      padding: '12px 16px', 
-                      border: `2px solid ${fieldErrors.category ? 'var(--danger)' : 'var(--border-color)'}`,
-                      borderRadius: '16px',
-                      fontSize: '0.875rem',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)'
-                    }}
+                    className={`input-field ${fieldErrors.category ? 'error' : ''}`}
                     value={formData.category}
-                    onChange={(event) => setFormData({ ...formData, category: event.target.value })}
-                    onBlur={(event) => handleFieldBlur('category', event.target.value)}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    onBlur={e => handleFieldBlur('category', e.target.value)}
+                    style={{ cursor: 'pointer' }}
                   >
-                    <option value="">Selecciona una categoria</option>
-                    {availableCategoryOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
+                    <option value="">Selecciona una categoría</option>
+                    {categoryOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
-                  {fieldErrors.category && (
-                    <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {fieldErrors.category}
-                    </small>
-                  )}
-                </div>
+                </FormField>
 
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Fecha</label>
+                <FormField label="Fecha">
                   <input
+                    className="input-field"
                     type="date"
-                    style={{ 
-                      width: '100%', 
-                      padding: '12px 16px', 
-                      border: '2px solid var(--border-color)', 
-                      borderRadius: '16px', 
-                      fontSize: '0.875rem',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)'
-                    }}
                     value={formData.date}
-                    onChange={(event) => setFormData({ ...formData, date: event.target.value })}
+                    onChange={e => setFormData({ ...formData, date: e.target.value })}
                   />
-                </div>
+                </FormField>
               </div>
-              
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '12px',
-                padding: '16px 24px',
+
+              {/* modal footer */}
+              <div style={{
+                display: 'flex', justifyContent: 'flex-end', gap: '10px',
+                padding: '1rem 1.5rem',
                 borderTop: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)'
+                background: 'var(--bg-secondary)',
+                borderBottomLeftRadius: 'var(--radius-3xl)',
+                borderBottomRightRadius: 'var(--radius-3xl)',
               }}>
-                <button type="button" style={{ padding: '10px 20px', background: 'var(--gray-200)', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: '500', color: 'var(--text-primary)' }} onClick={() => setIsModalOpen(false)}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
                   Cancelar
                 </button>
-                <button type="submit" style={{ padding: '10px 24px', background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: '500' }}>
-                  {editingTransactionId ? 'Actualizar' : 'Crear'}
+                <button type="submit" className="btn btn-primary">
+                  {editingTransactionId ? 'Actualizar' : 'Crear transacción'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes modalIn {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-      `}</style>
     </div>
   );
 };

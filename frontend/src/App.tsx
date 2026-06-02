@@ -14,85 +14,61 @@ function AppContent() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Toaster position="top-right" />
-      
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            fontFamily: 'var(--font-sans)',
+            fontSize: '0.875rem',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-color)',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-primary)',
+            boxShadow: 'var(--shadow-lg)',
+          },
+        }}
+      />
+
       <nav className="navbar">
         <div className="container navbar-container">
+          {/* Logo */}
           <div className="navbar-logo">
-            <span style={{ fontSize: '1.75rem' }}></span>
-            <span>Gestion de Finanzas IA</span>
-            <span className="navbar-badge">Inteligencia Artificial</span>
+            <div className="logo-icon"></div>
+            <span>Gestion de Finanzas </span>
+            <span className="navbar-badge">ia integrada</span>
           </div>
-          
+
+          {/* Right side */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              display: 'flex', 
-              gap: '0.5rem', 
-              background: 'var(--gray-100)', 
-              padding: '0.25rem', 
-              borderRadius: 'var(--radius-lg)' 
-            }}>
+            {/* Page tabs */}
+            <div className="nav-pills">
               <button
+                className={`nav-pill ${currentPage === 'dashboard' ? 'active' : ''}`}
                 onClick={() => setCurrentPage('dashboard')}
-                style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '0.5rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                  background: currentPage === 'dashboard' ? 'var(--primary-500)' : 'transparent',
-                  color: currentPage === 'dashboard' ? 'white' : 'var(--text-secondary)',
-                }}
               >
                 Dashboard
               </button>
               <button
+                className={`nav-pill ${currentPage === 'transactions' ? 'active' : ''}`}
                 onClick={() => setCurrentPage('transactions')}
-                style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '0.5rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                  background: currentPage === 'transactions' ? 'var(--primary-500)' : 'transparent',
-                  color: currentPage === 'transactions' ? 'white' : 'var(--text-secondary)',
-                }}
               >
                 Transacciones
               </button>
             </div>
-            
-            {/* Toggle modo oscuro - Observer notifica cambios */}
-            <div 
+
+            {/* Dark mode toggle — Observer notifica cambios */}
+            <div
+              className={`theme-toggle ${theme === 'dark' ? 'active' : ''}`}
               onClick={toggleTheme}
-              style={{
-                width: '48px',
-                height: '24px',
-                borderRadius: '12px',
-                background: theme === 'dark' ? 'var(--primary-500)' : 'var(--gray-300)',
-                cursor: 'pointer',
-                position: 'relative',
-                transition: 'all var(--transition-fast)'
-              }}
+              title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
             >
-              <div
-                style={{
-                  position: 'absolute',
-                  width: '20px',
-                  height: '20px',
-                  background: 'white',
-                  borderRadius: '50%',
-                  top: '2px',
-                  left: theme === 'dark' ? '26px' : '2px',
-                  transition: 'transform var(--transition-fast)'
-                }}
-              />
+              <div className="theme-toggle-knob" />
             </div>
           </div>
         </div>
       </nav>
-      
-      <main className="container" style={{ padding: '2rem 0' }}>
+
+      <main className="container" style={{ padding: '2.25rem 0', position: 'relative', zIndex: 1 }}>
         {currentPage === 'dashboard' ? <Dashboard /> : <TransactionsPage />}
       </main>
     </div>
