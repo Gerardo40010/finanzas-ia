@@ -1,6 +1,6 @@
-# 💰 Finanzas IA - Gestor de Finanzas Personales con Asistente Inteligente
+#  Finanzas IA - Gestor de Finanzas Personales con Asistente Inteligente
 
-## 📋 Descripción
+##  Descripción
 
 Aplicación web para gestión de finanzas personales que integra **Inteligencia Artificial** para analizar patrones de gasto, generar recomendaciones personalizadas y predecir gastos futuros.
 
@@ -10,7 +10,7 @@ Aplicación web para gestión de finanzas personales que integra **Inteligencia 
 
 ---
 
-## ✨ Características
+##  Características
 
 - 📊 Dashboard interactivo con estadísticas y gráficos
 - 🤖 Asistente IA con recomendaciones personalizadas
@@ -22,7 +22,7 @@ Aplicación web para gestión de finanzas personales que integra **Inteligencia 
 
 ---
 
-## 📦 Componentes Reutilizables
+##  Componentes Reutilizables
 
 | Componente | Tipo | Descripción |
 |------------|------|-------------|
