@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getDatabase } from '../database/sqliteClient';
+import DatabaseSingleton from '../database/sqliteClient';
 import AIService from '../services/aiService';
 import { Transaction } from '../types';
 
@@ -7,7 +7,8 @@ export class AIController {
   
   static async getAdvice(req: Request, res: Response) {
     try {
-      const db = await getDatabase();
+
+const db = await DatabaseSingleton.getInstance();
       const transactions: Transaction[] = await db.all('SELECT * FROM transactions');
       
       const advice = await AIService.analyzeSpending(transactions);
@@ -58,7 +59,8 @@ export class AIController {
   
   static async getSpendingPrediction(req: Request, res: Response) {
     try {
-      const db = await getDatabase();
+
+const db = await DatabaseSingleton.getInstance();
       const transactions: Transaction[] = await db.all('SELECT * FROM transactions WHERE type = "expense"');
       
       const prediction = await AIService.predictNextMonthExpenses(transactions);

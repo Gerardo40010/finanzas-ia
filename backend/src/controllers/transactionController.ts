@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getDatabase } from '../database/sqliteClient';
+import DatabaseSingleton from '../database/sqliteClient';
 import { validateTransaction, validCategories } from '../utils/validators';
 import { CreateTransactionDTO } from '../types';
 
@@ -8,7 +8,7 @@ export class TransactionController {
   
   static async getAll(req: Request, res: Response) {
     try {
-      const db = await getDatabase();
+const db = await DatabaseSingleton.getInstance();
       const { type, category, startDate, endDate } = req.query;
       
       let query = 'SELECT * FROM transactions WHERE 1=1';
@@ -62,7 +62,7 @@ export class TransactionController {
         });
       }
       
-      const db = await getDatabase();
+const db = await DatabaseSingleton.getInstance();
       const id = uuidv4();
       const date = transactionData.date || new Date().toISOString();
       
@@ -91,7 +91,7 @@ export class TransactionController {
       const { id } = req.params;
       const updates = req.body;
       
-      const db = await getDatabase();
+const db = await DatabaseSingleton.getInstance();
       
       // Verificar que existe
       const existing = await db.get('SELECT * FROM transactions WHERE id = ?', id);
@@ -124,7 +124,7 @@ export class TransactionController {
   static async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const db = await getDatabase();
+const db = await DatabaseSingleton.getInstance();
       
       const existing = await db.get('SELECT * FROM transactions WHERE id = ?', id);
       if (!existing) {
@@ -141,7 +141,7 @@ export class TransactionController {
   
   static async getSummary(req: Request, res: Response) {
     try {
-      const db = await getDatabase();
+const db = await DatabaseSingleton.getInstance();
       
       const totalIncome = await db.get(
         "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'income'"

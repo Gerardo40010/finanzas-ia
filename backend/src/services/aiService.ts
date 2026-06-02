@@ -1,113 +1,125 @@
 import { Transaction } from '../types';
 
-interface CategoryStats {
-  category: string;
-  total: number;
-  count: number;
-  average: number;
+interface CategoryStatistics {
+  categoryName: string;
+  totalAmount: number;
+  transactionCount: number;
+  averageAmount: number;
 }
 
 export class AIService {
   
-  static async analyzeSpending(transactions: Transaction[]): Promise<string[]> {
-    const advice: string[] = [];
-    const expenses = transactions.filter(t => t.type === 'expense');
-    const incomes = transactions.filter(t => t.type === 'income');
+  static async analyzeSpending(allTransactions: Transaction[]): Promise<string[]> {
+    const recommendationsList: string[] = [];
+    const expenseTransactions = allTransactions.filter(singleTransaction => singleTransaction.type === 'expense');
+    const incomeTransactions = allTransactions.filter(singleTransaction => singleTransaction.type === 'income');
     
-    if (expenses.length === 0) {
-      advice.push('📊 Aún no tienes gastos registrados. ¡Empieza a trackear tus finanzas!');
-      return advice;
+    if (expenseTransactions.length === 0) {
+      recommendationsList.push('📊 Aún no tienes gastos registrados. ¡Empieza a trackear tus finanzas!');
+      return recommendationsList;
     }
     
     // Calcular totales
-    const totalExpenses = expenses.reduce((sum, t) => sum + t.amount, 0);
-    const totalIncome = incomes.reduce((sum, t) => sum + t.amount, 0);
-    const balance = totalIncome - totalExpenses;
+    const totalExpensesAmount = expenseTransactions.reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
+    const totalIncomeAmount = incomeTransactions.reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
+    const currentBalance = totalIncomeAmount - totalExpensesAmount;
     
     // Regla 1: Análisis de balance
-    if (balance < 0) {
-      advice.push(`🔴 ¡ALERTA! Estás gastando ${Math.abs(balance).toFixed(2)}Bs más de lo que ingresas. Revisa tus gastos urgentemente.`);
-    } else if (balance < totalIncome * 0.1) {
-      advice.push(`⚠️ Tu ahorro es bajo (${balance.toFixed(2)}Bs). Intenta ahorrar al menos el 10% de tus ingresos.`);
+    if (currentBalance < 0) {
+      recommendationsList.push(`🔴 ¡ALERTA! Estás gastando ${Math.abs(currentBalance).toFixed(2)} Bs más de lo que ingresas. Revisa tus gastos urgentemente.`);
+    } else if (currentBalance < totalIncomeAmount * 0.1) {
+      recommendationsList.push(`⚠️ Tu ahorro es bajo (${currentBalance.toFixed(2)} Bs). Intenta ahorrar al menos el 10% de tus ingresos.`);
     } else {
-      advice.push(`✅ ¡Buen trabajo! Has ahorrado ${balance.toFixed(2)}Bs este período.`);
+      recommendationsList.push(`✅ ¡Buen trabajo! Has ahorrado ${currentBalance.toFixed(2)} Bs este período.`);
     }
     
     // Regla 2: Detectar categoría con mayor gasto
-    const categoryStats = this.getCategoryStats(expenses);
-    if (categoryStats.length > 0) {
-      const topCategory = categoryStats.reduce((max, cat) => cat.total > max.total ? cat : max);
-      const percentageOfTotal = (topCategory.total / totalExpenses) * 100;
+    const categoryStatistics = this.calculateCategoryStatistics(expenseTransactions);
+    if (categoryStatistics.length > 0) {
+      const topCategory = categoryStatistics.reduce((maximumCategory, currentCategory) => 
+        currentCategory.totalAmount > maximumCategory.totalAmount ? currentCategory : maximumCategory
+      );
+      const percentageOfTotalExpenses = (topCategory.totalAmount / totalExpensesAmount) * 100;
       
-      if (percentageOfTotal > 40) {
-        advice.push(`🎯 El ${percentageOfTotal.toFixed(0)}% de tus gastos está en "${topCategory.category}". ¿Puedes reducir esta categoría?`);
+      if (percentageOfTotalExpenses > 40) {
+        recommendationsList.push(`🎯 El ${percentageOfTotalExpenses.toFixed(0)}% de tus gastos está en "${topCategory.categoryName}". ¿Puedes reducir esta categoría?`);
       }
     }
     
     // Regla 3: Detectar gastos pequeños que suman mucho
-    const smallExpenses = expenses.filter(e => e.amount < 20);
-    if (smallExpenses.length > 10) {
-      const smallTotal = smallExpenses.reduce((sum, e) => sum + e.amount, 0);
-      advice.push(`💡 Tienes ${smallExpenses.length} gastos pequeños (<20Bs) que suman ${smallTotal.toFixed(2)}Bs. ¡Cada pequeño gasto cuenta!`);
+    const smallExpenseTransactions = expenseTransactions.filter(singleExpense => singleExpense.amount < 20);
+    if (smallExpenseTransactions.length > 10) {
+      const smallExpensesTotalAmount = smallExpenseTransactions.reduce((accumulatedSum, singleExpense) => accumulatedSum + singleExpense.amount, 0);
+      recommendationsList.push(`💡 Tienes ${smallExpenseTransactions.length} gastos pequeños (<20 Bs) que suman ${smallExpensesTotalAmount.toFixed(2)} Bs. ¡Cada pequeño gasto cuenta!`);
     }
     
     // Regla 4: Recomendación inteligente personalizada
-    if (totalExpenses > 0) {
-      const savingTarget = totalExpenses * 0.1;
-      advice.push(`🎯 Meta sugerida: Intenta reducir tus gastos en un 10% (${savingTarget.toFixed(2)}Bs) este mes.`);
+    if (totalExpensesAmount > 0) {
+      const suggestedSavingTarget = totalExpensesAmount * 0.1;
+      recommendationsList.push(`🎯 Meta sugerida: Intenta reducir tus gastos en un 10% (${suggestedSavingTarget.toFixed(2)} Bs) este mes.`);
     }
     
-    return advice;
+    return recommendationsList;
   }
   
-  static async predictNextMonthExpenses(transactions: Transaction[]): Promise<number> {
-    const expenses = transactions.filter(t => t.type === 'expense');
-    if (expenses.length < 3) return 0;
+  static async predictNextMonthExpenses(allTransactions: Transaction[]): Promise<number> {
+    const expenseTransactions = allTransactions.filter(singleTransaction => singleTransaction.type === 'expense');
+    if (expenseTransactions.length < 3) return 0;
     
-    // Regresión lineal simple para predicción
-    const sorted = expenses.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const n = sorted.length;
+    // Ordenar por fecha
+    const sortedTransactions = [...expenseTransactions].sort((firstTransaction, secondTransaction) => 
+      new Date(firstTransaction.date).getTime() - new Date(secondTransaction.date).getTime()
+    );
     
-    // Usar últimos 3 meses si hay datos
-    const recent = sorted.slice(-Math.min(12, n));
-    const avgExpense = recent.reduce((sum, t) => sum + t.amount, 0) / recent.length;
+    // Usar últimos 12 gastos o todos si hay menos
+    const recentTransactions = sortedTransactions.slice(-Math.min(12, sortedTransactions.length));
+    const averageExpenseAmount = recentTransactions.reduce((accumulatedSum, singleTransaction) => 
+      accumulatedSum + singleTransaction.amount, 0) / recentTransactions.length;
     
     // Pequeña inflación del 2% para predicción conservadora
-    return avgExpense * 1.02;
+    return averageExpenseAmount * 1.02;
   }
   
-  private static getCategoryStats(expenses: Transaction[]): CategoryStats[] {
-    const stats = new Map<string, { total: number; count: number }>();
+  private static calculateCategoryStatistics(expenseTransactions: Transaction[]): CategoryStatistics[] {
+    const statisticsMap = new Map<string, { totalAmount: number; transactionCount: number }>();
     
-    for (const expense of expenses) {
-      const existing = stats.get(expense.category);
-      if (existing) {
-        existing.total += expense.amount;
-        existing.count++;
+    for (const singleExpense of expenseTransactions) {
+      const existingStats = statisticsMap.get(singleExpense.category);
+      if (existingStats) {
+        existingStats.totalAmount += singleExpense.amount;
+        existingStats.transactionCount++;
       } else {
-        stats.set(expense.category, { total: expense.amount, count: 1 });
+        statisticsMap.set(singleExpense.category, { 
+          totalAmount: singleExpense.amount, 
+          transactionCount: 1 
+        });
       }
     }
     
-    return Array.from(stats.entries()).map(([category, data]) => ({
-      category,
-      total: data.total,
-      count: data.count,
-      average: data.total / data.count
-    }));
-  }
-  
-  static generateBudgetSuggestion(transactions: Transaction[]): Record<string, number> {
-    const expenses = transactions.filter(t => t.type === 'expense');
-    const categoryStats = this.getCategoryStats(expenses);
-    
-    const suggestions: Record<string, number> = {};
-    for (const stat of categoryStats) {
-      // Sugerir reducir 5% en cada categoría si hay déficit
-      suggestions[stat.category] = stat.total * 0.95;
+    const statisticsList: CategoryStatistics[] = [];
+    for (const [categoryName, statisticsData] of statisticsMap) {
+      statisticsList.push({
+        categoryName,
+        totalAmount: statisticsData.totalAmount,
+        transactionCount: statisticsData.transactionCount,
+        averageAmount: statisticsData.totalAmount / statisticsData.transactionCount
+      });
     }
     
-    return suggestions;
+    return statisticsList;
+  }
+  
+  static generateBudgetSuggestion(allTransactions: Transaction[]): Record<string, number> {
+    const expenseTransactions = allTransactions.filter(singleTransaction => singleTransaction.type === 'expense');
+    const categoryStatistics = this.calculateCategoryStatistics(expenseTransactions);
+    
+    const budgetSuggestions: Record<string, number> = {};
+    for (const categoryStat of categoryStatistics) {
+      // Sugerir reducir 5% en cada categoría como meta de ahorro
+      budgetSuggestions[categoryStat.categoryName] = categoryStat.totalAmount * 0.95;
+    }
+    
+    return budgetSuggestions;
   }
 }
 

@@ -8,9 +8,9 @@ import Skeleton from '../components/ui/Skeleton';
 
 const TransactionsPage: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreateTransactionDTO>({
     description: '',
     amount: 0,
@@ -18,9 +18,9 @@ const TransactionsPage: React.FC = () => {
     category: '',
     date: new Date().toISOString().split('T')[0]
   });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
-  const [filters, setFilters] = useState({
+  const [activeFilters, setActiveFilters] = useState({
     type: 'all',
     category: 'all',
     startDate: '',
@@ -28,89 +28,81 @@ const TransactionsPage: React.FC = () => {
   });
 
   useEffect(() => {
-    loadTransactions();
+    loadAllTransactions();
   }, []);
 
-  const loadTransactions = async () => {
+  const loadAllTransactions = async () => {
     try {
-      const data = await transactionService.getAll();
-      setTransactions(data);
-    } catch (error) {
+      const transactionsFromApi = await transactionService.getAll();
+      const transactionData = transactionsFromApi;
+      setTransactions(transactionData);
+    } catch (apiError) {
       toast.error('Error al cargar transacciones');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleFieldBlur = (field: string, value: string | number) => {
-    const error = validateField(field, value, formData.type);
-    setErrors(prev => ({ ...prev, [field]: error || '' }));
+  const handleFieldBlur = (fieldName: string, fieldValue: string | number) => {
+    const validationErrorMessage = validateField(fieldName, fieldValue, formData.type);
+    setFieldErrors(previousErrors => ({ ...previousErrors, [fieldName]: validationErrorMessage || '' }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFormSubmit = async (formEvent: React.FormEvent) => {
+    formEvent.preventDefault();
     
     const validationErrors = validateTransaction(formData);
     if (validationErrors.length > 0) {
-      const errorObj: Record<string, string> = {};
-      validationErrors.forEach(err => {
-        if (err.includes('descripcion')) errorObj.description = err;
-        if (err.includes('monto')) errorObj.amount = err;
-        if (err.includes('categoria')) errorObj.category = err;
+      const errorsGroupedByField: Record<string, string> = {};
+      validationErrors.forEach(singleError => {
+        if (singleError.includes('descripcion')) errorsGroupedByField.description = singleError;
+        if (singleError.includes('monto')) errorsGroupedByField.amount = singleError;
+        if (singleError.includes('categoria')) errorsGroupedByField.category = singleError;
       });
-      setErrors(errorObj);
+      setFieldErrors(errorsGroupedByField);
       toast.error('Por favor corrige los errores');
       return;
     }
     
     try {
-      if (editingId) {
-        await transactionService.update(editingId, formData);
-        toast.success('Transaccion actualizada', {
-          duration: 3000,
-          style: { background: 'var(--success)', color: 'white', borderRadius: '16px' }
-        });
+      if (editingTransactionId) {
+        await transactionService.update(editingTransactionId, formData);
+        toast.success('Transaccion actualizada');
       } else {
         await transactionService.create(formData);
-        toast.success('Transaccion creada', {
-          duration: 3000,
-          style: { background: 'var(--success)', color: 'white', borderRadius: '16px' }
-        });
+        toast.success('Transaccion creada');
       }
-      setShowModal(false);
-      resetForm();
-      loadTransactions();
-    } catch (error) {
+      setIsModalOpen(false);
+      resetFormFields();
+      loadAllTransactions();
+    } catch (apiError) {
       toast.error('Error al guardar transaccion');
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteTransaction = async (transactionId: string) => {
     try {
-      await transactionService.delete(id);
-      toast.success('Transaccion eliminada', {
-        duration: 3000,
-        style: { background: 'var(--danger)', color: 'white', borderRadius: '16px' }
-      });
-      loadTransactions();
-    } catch (error) {
+      await transactionService.delete(transactionId);
+      toast.success('Transaccion eliminada');
+      loadAllTransactions();
+    } catch (apiError) {
       toast.error('Error al eliminar transaccion');
     }
   };
 
-  const handleEdit = (transaction: Transaction) => {
+  const handleEditTransaction = (transactionToEdit: Transaction) => {
     setFormData({
-      description: transaction.description,
-      amount: transaction.amount,
-      type: transaction.type,
-      category: transaction.category,
-      date: transaction.date.split('T')[0]
+      description: transactionToEdit.description,
+      amount: transactionToEdit.amount,
+      type: transactionToEdit.type,
+      category: transactionToEdit.category,
+      date: transactionToEdit.date.split('T')[0]
     });
-    setEditingId(transaction.id);
-    setShowModal(true);
+    setEditingTransactionId(transactionToEdit.id);
+    setIsModalOpen(true);
   };
 
-  const resetForm = () => {
+  const resetFormFields = () => {
     setFormData({
       description: '',
       amount: 0,
@@ -118,78 +110,75 @@ const TransactionsPage: React.FC = () => {
       category: '',
       date: new Date().toISOString().split('T')[0]
     });
-    setEditingId(null);
-    setErrors({});
+    setEditingTransactionId(null);
+    setFieldErrors({});
   };
 
-  const getFilteredTransactions = () => {
-    return transactions.filter(t => {
-      if (filters.type !== 'all' && t.type !== filters.type) return false;
-      if (filters.category !== 'all' && t.category !== filters.category) return false;
-      if (filters.startDate && new Date(t.date) < new Date(filters.startDate)) return false;
-      if (filters.endDate && new Date(t.date) > new Date(filters.endDate)) return false;
+  const getFilteredTransactionList = () => {
+    return transactions.filter(singleTransaction => {
+      if (activeFilters.type !== 'all' && singleTransaction.type !== activeFilters.type) return false;
+      if (activeFilters.category !== 'all' && singleTransaction.category !== activeFilters.category) return false;
+      if (activeFilters.startDate && new Date(singleTransaction.date) < new Date(activeFilters.startDate)) return false;
+      if (activeFilters.endDate && new Date(singleTransaction.date) > new Date(activeFilters.endDate)) return false;
       return true;
     });
   };
 
-  const filteredTransactions = getFilteredTransactions();
+  const filteredTransactions = getFilteredTransactionList();
 
-  const exportToCSV = () => {
-    const headers = ['Fecha', 'Descripcion', 'Categoria', 'Tipo', 'Monto (Bs)'];
-    const rows = filteredTransactions.map(t => [
-      new Date(t.date).toLocaleDateString('es-BO'),
-      t.description,
-      t.category,
-      t.type === 'income' ? 'Ingreso' : 'Gasto',
-      t.amount.toString()
+  const exportTransactionsToCSV = () => {
+    const csvHeaders = ['Fecha', 'Descripcion', 'Categoria', 'Tipo', 'Monto (Bs)'];
+    const csvRows = filteredTransactions.map(singleTransaction => [
+      new Date(singleTransaction.date).toLocaleDateString('es-BO'),
+      singleTransaction.description,
+      singleTransaction.category,
+      singleTransaction.type === 'income' ? 'Ingreso' : 'Gasto',
+      singleTransaction.amount.toString()
     ]);
     
-    const csvContent = [headers, ...rows]
+    const csvFileContent = [csvHeaders, ...csvRows]
       .map(row => row.join(','))
       .join('\n');
     
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.setAttribute('download', `transacciones_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const csvBlob = new Blob(['\uFEFF' + csvFileContent], { type: 'text/csv;charset=utf-8;' });
+    const downloadLink = document.createElement('a');
+    const blobUrl = URL.createObjectURL(csvBlob);
+    downloadLink.href = blobUrl;
+    downloadLink.setAttribute('download', `transacciones_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(blobUrl);
     
-    toast.success(`${filteredTransactions.length} transacciones exportadas`, {
-      duration: 3000,
-      style: { background: 'var(--primary-500)', color: 'white', borderRadius: '16px' }
-    });
+    toast.success(`${filteredTransactions.length} transacciones exportadas`);
   };
 
-  const totalIncome = filteredTransactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalIncomeAmount = filteredTransactions
+    .filter(singleTransaction => singleTransaction.type === 'income')
+    .reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
   
-  const totalExpenses = filteredTransactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const totalExpensesAmount = filteredTransactions
+    .filter(singleTransaction => singleTransaction.type === 'expense')
+    .reduce((accumulatedSum, singleTransaction) => accumulatedSum + singleTransaction.amount, 0);
 
-  const categoryOptions = getAllCategories().map(cat => ({ value: cat, label: cat }));
-  const uniqueCategories = ['all', ...new Set(transactions.map(t => t.category))];
+  const availableCategoryOptions = getAllCategories().map(categoryName => ({ value: categoryName, label: categoryName }));
+  const uniqueCategoryNames = ['all', ...new Set(transactions.map(singleTransaction => singleTransaction.category))];
 
-  const getCategoryIcon = (category: string): string => {
-    const icons: Record<string, string> = {
+  const getIconForCategory = (categoryName: string): string => {
+    const categoryIcons: Record<string, string> = {
       alimentacion: '🍎', transporte: '🚗', ocio: '🎬', salario: '💰',
       suscripciones: '📺', salud: '🏥', educacion: '📚', extra: '✨',
       inversion: '📈', regalo: '🎁', servicios: '💡', otros: '📦'
     };
-    return icons[category] || '📌';
+    return categoryIcons[categoryName] || '📌';
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const formatTransactionDate = (dateString: string) => {
+    const transactionDate = new Date(dateString);
+    return transactionDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <Skeleton width="250px" height="40px" />
@@ -248,8 +237,8 @@ const TransactionsPage: React.FC = () => {
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)'
               }}
-              value={filters.type}
-              onChange={(e) => setFilters({...filters, type: e.target.value})}
+              value={activeFilters.type}
+              onChange={(event) => setActiveFilters({...activeFilters, type: event.target.value})}
             >
               <option value="all">Todos</option>
               <option value="income">Ingresos</option>
@@ -269,11 +258,11 @@ const TransactionsPage: React.FC = () => {
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)'
               }}
-              value={filters.category}
-              onChange={(e) => setFilters({...filters, category: e.target.value})}
+              value={activeFilters.category}
+              onChange={(event) => setActiveFilters({...activeFilters, category: event.target.value})}
             >
-              {uniqueCategories.map(cat => (
-                <option key={cat} value={cat}>{cat === 'all' ? 'Todas' : cat}</option>
+              {uniqueCategoryNames.map(categoryName => (
+                <option key={categoryName} value={categoryName}>{categoryName === 'all' ? 'Todas' : categoryName}</option>
               ))}
             </select>
           </div>
@@ -291,8 +280,8 @@ const TransactionsPage: React.FC = () => {
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)'
               }}
-              value={filters.startDate}
-              onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+              value={activeFilters.startDate}
+              onChange={(event) => setActiveFilters({...activeFilters, startDate: event.target.value})}
             />
           </div>
           
@@ -309,8 +298,8 @@ const TransactionsPage: React.FC = () => {
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)'
               }}
-              value={filters.endDate}
-              onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+              value={activeFilters.endDate}
+              onChange={(event) => setActiveFilters({...activeFilters, endDate: event.target.value})}
             />
           </div>
           
@@ -325,7 +314,7 @@ const TransactionsPage: React.FC = () => {
               fontWeight: '500',
               color: 'var(--text-primary)'
             }}
-            onClick={() => setFilters({type: 'all', category: 'all', startDate: '', endDate: ''})}
+            onClick={() => setActiveFilters({type: 'all', category: 'all', startDate: '', endDate: ''})}
           >
             Limpiar
           </button>
@@ -337,13 +326,13 @@ const TransactionsPage: React.FC = () => {
         <div style={{ background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)', borderRadius: '20px', padding: '16px' }}>
           <div style={{ fontSize: '0.75rem', color: '#065f46', marginBottom: '4px' }}>Total Ingresos</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#059669' }}>
-            {formatCurrency(totalIncome)}
+            {formatCurrency(totalIncomeAmount)}
           </div>
         </div>
         <div style={{ background: 'linear-gradient(135deg, #fef2f2, #fee2e2)', borderRadius: '20px', padding: '16px' }}>
           <div style={{ fontSize: '0.75rem', color: '#991b1b', marginBottom: '4px' }}>Total Gastos</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#dc2626' }}>
-            {formatCurrency(totalExpenses)}
+            {formatCurrency(totalExpensesAmount)}
           </div>
         </div>
       </div>
@@ -375,7 +364,7 @@ const TransactionsPage: React.FC = () => {
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
-              onClick={exportToCSV} 
+              onClick={exportTransactionsToCSV} 
               style={{ 
                 padding: '8px 20px', 
                 background: 'var(--gray-200)', 
@@ -386,13 +375,13 @@ const TransactionsPage: React.FC = () => {
                 color: 'var(--text-primary)',
                 transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--gray-300)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--gray-200)'}
+              onMouseEnter={(event) => event.currentTarget.style.background = 'var(--gray-300)'}
+              onMouseLeave={(event) => event.currentTarget.style.background = 'var(--gray-200)'}
             >
               Exportar CSV
             </button>
             <button 
-              onClick={() => { resetForm(); setShowModal(true); }}
+              onClick={() => { resetFormFields(); setIsModalOpen(true); }}
               style={{ 
                 padding: '8px 20px', 
                 background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))', 
@@ -403,8 +392,8 @@ const TransactionsPage: React.FC = () => {
                 fontWeight: '500',
                 transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseEnter={(event) => event.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={(event) => event.currentTarget.style.opacity = '1'}
             >
               Nueva Transaccion
             </button>
@@ -418,9 +407,9 @@ const TransactionsPage: React.FC = () => {
           </div>
         ) : (
           <div>
-            {filteredTransactions.map(transaction => (
+            {filteredTransactions.map(singleTransaction => (
               <div 
-                key={transaction.id} 
+                key={singleTransaction.id} 
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -430,30 +419,30 @@ const TransactionsPage: React.FC = () => {
                   transition: 'all 0.2s',
                   cursor: 'pointer'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--gray-100)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(event) => event.currentTarget.style.background = 'var(--gray-100)'}
+                onMouseLeave={(event) => event.currentTarget.style.background = 'transparent'}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{
                     width: '44px',
                     height: '44px',
                     borderRadius: '12px',
-                    background: transaction.type === 'income' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    background: singleTransaction.type === 'income' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '1.25rem'
                   }}>
-                    {getCategoryIcon(transaction.category)}
+                    {getIconForCategory(singleTransaction.category)}
                   </div>
                   <div>
                     <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                      {transaction.description}
+                      {singleTransaction.description}
                     </div>
                     <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
-                      <span style={{ textTransform: 'capitalize' }}>{transaction.category}</span>
+                      <span style={{ textTransform: 'capitalize' }}>{singleTransaction.category}</span>
                       <span>•</span>
-                      <span>{formatDate(transaction.date)}</span>
+                      <span>{formatTransactionDate(singleTransaction.date)}</span>
                     </div>
                   </div>
                 </div>
@@ -462,14 +451,14 @@ const TransactionsPage: React.FC = () => {
                   <div style={{ 
                     fontWeight: '700', 
                     fontSize: '0.875rem',
-                    color: transaction.type === 'income' ? 'var(--success)' : 'var(--danger)'
+                    color: singleTransaction.type === 'income' ? 'var(--success)' : 'var(--danger)'
                   }}>
-                    {transaction.type === 'expense' ? '-' : '+'} {formatCurrency(transaction.amount)}
+                    {singleTransaction.type === 'expense' ? '-' : '+'} {formatCurrency(singleTransaction.amount)}
                   </div>
                   
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
-                      onClick={() => handleEdit(transaction)}
+                      onClick={() => handleEditTransaction(singleTransaction)}
                       style={{
                         background: 'var(--primary-500)',
                         border: 'none',
@@ -481,13 +470,13 @@ const TransactionsPage: React.FC = () => {
                         fontWeight: 500,
                         transition: 'all 0.2s'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--primary-600)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--primary-500)'}
+                      onMouseEnter={(event) => event.currentTarget.style.background = 'var(--primary-600)'}
+                      onMouseLeave={(event) => event.currentTarget.style.background = 'var(--primary-500)'}
                     >
                       Editar
                     </button>
                     <button
-                      onClick={() => handleDelete(transaction.id)}
+                      onClick={() => handleDeleteTransaction(singleTransaction.id)}
                       style={{
                         background: 'var(--danger)',
                         border: 'none',
@@ -499,8 +488,8 @@ const TransactionsPage: React.FC = () => {
                         fontWeight: 500,
                         transition: 'all 0.2s'
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--danger-dark)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--danger)'}
+                      onMouseEnter={(event) => event.currentTarget.style.background = 'var(--danger-dark)'}
+                      onMouseLeave={(event) => event.currentTarget.style.background = 'var(--danger)'}
                     >
                       Eliminar
                     </button>
@@ -513,7 +502,7 @@ const TransactionsPage: React.FC = () => {
       </div>
 
       {/* Modal */}
-      {showModal && (
+      {isModalOpen && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -523,7 +512,7 @@ const TransactionsPage: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000
-        }} onClick={() => setShowModal(false)}>
+        }} onClick={() => setIsModalOpen(false)}>
           <div style={{
             background: 'var(--bg-primary)',
             borderRadius: '32px',
@@ -533,7 +522,7 @@ const TransactionsPage: React.FC = () => {
             overflowY: 'auto',
             animation: 'modalIn 0.3s ease',
             border: '1px solid var(--border-color)'
-          }} onClick={(e) => e.stopPropagation()}>
+          }} onClick={(event) => event.stopPropagation()}>
             <div style={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
@@ -542,10 +531,10 @@ const TransactionsPage: React.FC = () => {
               borderBottom: '1px solid var(--border-color)'
             }}>
               <h2 style={{ fontSize: '1.125rem', fontWeight: '600', color: 'var(--text-primary)' }}>
-                {editingId ? 'Editar Transaccion' : 'Nueva Transaccion'}
+                {editingTransactionId ? 'Editar Transaccion' : 'Nueva Transaccion'}
               </h2>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => setIsModalOpen(false)}
                 style={{
                   background: 'var(--gray-200)',
                   border: 'none',
@@ -561,7 +550,7 @@ const TransactionsPage: React.FC = () => {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleFormSubmit}>
               <div style={{ padding: '20px 24px' }}>
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>Descripcion</label>
@@ -570,20 +559,20 @@ const TransactionsPage: React.FC = () => {
                     style={{ 
                       width: '100%', 
                       padding: '12px 16px', 
-                      border: `2px solid ${errors.description ? 'var(--danger)' : 'var(--border-color)'}`,
+                      border: `2px solid ${fieldErrors.description ? 'var(--danger)' : 'var(--border-color)'}`,
                       borderRadius: '16px',
                       fontSize: '0.875rem',
                       background: 'var(--bg-primary)',
                       color: 'var(--text-primary)'
                     }}
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    onBlur={(e) => handleFieldBlur('description', e.target.value)}
+                    onChange={(event) => setFormData({ ...formData, description: event.target.value })}
+                    onBlur={(event) => handleFieldBlur('description', event.target.value)}
                     placeholder="Ej: Compra supermercado"
                   />
-                  {errors.description && (
+                  {fieldErrors.description && (
                     <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {errors.description}
+                      {fieldErrors.description}
                     </small>
                   )}
                 </div>
@@ -595,20 +584,20 @@ const TransactionsPage: React.FC = () => {
                     style={{ 
                       width: '100%', 
                       padding: '12px 16px', 
-                      border: `2px solid ${errors.amount ? 'var(--danger)' : 'var(--border-color)'}`,
+                      border: `2px solid ${fieldErrors.amount ? 'var(--danger)' : 'var(--border-color)'}`,
                       borderRadius: '16px',
                       fontSize: '0.875rem',
                       background: 'var(--bg-primary)',
                       color: 'var(--text-primary)'
                     }}
                     value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
-                    onBlur={(e) => handleFieldBlur('amount', parseFloat(e.target.value))}
+                    onChange={(event) => setFormData({ ...formData, amount: parseFloat(event.target.value) })}
+                    onBlur={(event) => handleFieldBlur('amount', parseFloat(event.target.value))}
                     placeholder="0"
                   />
-                  {errors.amount && (
+                  {fieldErrors.amount && (
                     <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {errors.amount}
+                      {fieldErrors.amount}
                     </small>
                   )}
                 </div>
@@ -643,26 +632,26 @@ const TransactionsPage: React.FC = () => {
                     style={{ 
                       width: '100%', 
                       padding: '12px 16px', 
-                      border: `2px solid ${errors.category ? 'var(--danger)' : 'var(--border-color)'}`,
+                      border: `2px solid ${fieldErrors.category ? 'var(--danger)' : 'var(--border-color)'}`,
                       borderRadius: '16px',
                       fontSize: '0.875rem',
                       background: 'var(--bg-primary)',
                       color: 'var(--text-primary)'
                     }}
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    onBlur={(e) => handleFieldBlur('category', e.target.value)}
+                    onChange={(event) => setFormData({ ...formData, category: event.target.value })}
+                    onBlur={(event) => handleFieldBlur('category', event.target.value)}
                   >
                     <option value="">Selecciona una categoria</option>
-                    {categoryOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {availableCategoryOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
-                  {errors.category && (
+                  {fieldErrors.category && (
                     <small style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '4px', display: 'block' }}>
-                      {errors.category}
+                      {fieldErrors.category}
                     </small>
                   )}
                 </div>
@@ -681,7 +670,7 @@ const TransactionsPage: React.FC = () => {
                       color: 'var(--text-primary)'
                     }}
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    onChange={(event) => setFormData({ ...formData, date: event.target.value })}
                   />
                 </div>
               </div>
@@ -694,11 +683,11 @@ const TransactionsPage: React.FC = () => {
                 borderTop: '1px solid var(--border-color)',
                 background: 'var(--bg-secondary)'
               }}>
-                <button type="button" style={{ padding: '10px 20px', background: 'var(--gray-200)', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: '500', color: 'var(--text-primary)' }} onClick={() => setShowModal(false)}>
+                <button type="button" style={{ padding: '10px 20px', background: 'var(--gray-200)', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: '500', color: 'var(--text-primary)' }} onClick={() => setIsModalOpen(false)}>
                   Cancelar
                 </button>
                 <button type="submit" style={{ padding: '10px 24px', background: 'linear-gradient(135deg, var(--primary-500), var(--primary-700))', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer', fontWeight: '500' }}>
-                  {editingId ? 'Actualizar' : 'Crear'}
+                  {editingTransactionId ? 'Actualizar' : 'Crear'}
                 </button>
               </div>
             </form>

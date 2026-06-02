@@ -1,27 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import TransactionsPage from './pages/TransactionsPage';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Toaster } from 'react-hot-toast';
 import './index.css';
 
 type Page = 'dashboard' | 'transactions';
 
-function App() {
+// (Observer)
+function AppContent() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved === 'dark';
-  });
-
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.setAttribute('data-theme', 'light');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDarkMode]);
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -31,7 +20,7 @@ function App() {
         <div className="container navbar-container">
           <div className="navbar-logo">
             <span style={{ fontSize: '1.75rem' }}></span>
-            <span>Gestor de Finanzas IA</span>
+            <span>Gestion de Finanzas IA</span>
             <span className="navbar-badge">Inteligencia Artificial</span>
           </div>
           
@@ -73,14 +62,14 @@ function App() {
               </button>
             </div>
             
-            {/* Toggle modo oscuro original - sin emojis */}
+            {/* Toggle modo oscuro - Observer notifica cambios */}
             <div 
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={toggleTheme}
               style={{
                 width: '48px',
                 height: '24px',
                 borderRadius: '12px',
-                background: isDarkMode ? 'var(--primary-500)' : 'var(--gray-300)',
+                background: theme === 'dark' ? 'var(--primary-500)' : 'var(--gray-300)',
                 cursor: 'pointer',
                 position: 'relative',
                 transition: 'all var(--transition-fast)'
@@ -94,7 +83,7 @@ function App() {
                   background: 'white',
                   borderRadius: '50%',
                   top: '2px',
-                  left: isDarkMode ? '26px' : '2px',
+                  left: theme === 'dark' ? '26px' : '2px',
                   transition: 'transform var(--transition-fast)'
                 }}
               />
@@ -110,6 +99,12 @@ function App() {
   );
 }
 
+function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 export default App;
-
-

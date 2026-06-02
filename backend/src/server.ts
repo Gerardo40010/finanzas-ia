@@ -1,41 +1,41 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './database/sqliteClient';
+import DatabaseSingleton from './database/sqliteClient';
 import transactionRoutes from './routes/transactions';
 import aiRoutes from './routes/ai';
 
-// Cargar variables de entorno
+
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middlewares
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
+
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// Rutas
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Ruta de salud
+
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Ruta raíz
+
 app.get('/', (req, res) => {
   res.json({
     name: 'Finanzas IA API',
     version: '1.0.0',
+    description: 'Gestor de Finanzas Personales con Asistente Inteligente',
     endpoints: {
       transactions: '/api/transactions',
       ai: '/api/ai',
@@ -44,7 +44,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Manejo de errores global
+
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error no manejado:', err);
   res.status(500).json({ 
@@ -54,10 +54,12 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Iniciar servidor
+
 async function startServer() {
   try {
-    await initializeDatabase();
+    // Usar el patrón Singleton para la base de datos
+    const db = await DatabaseSingleton.getInstance();
+    console.log('✅ Base de datos inicializada correctamente (Singleton)');
     
     app.listen(PORT, () => {
       console.log(`
@@ -73,6 +75,19 @@ async function startServer() {
     process.exit(1);
   }
 }
+
+
+process.on('SIGINT', async () => {
+  console.log('\n🔴 Cerrando servidor...');
+  await DatabaseSingleton.closeInstance();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🔴 Cerrando servidor...');
+  await DatabaseSingleton.closeInstance();
+  process.exit(0);
+});
 
 startServer();
 

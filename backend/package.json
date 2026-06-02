@@ -4,10 +4,12 @@
   "description": "Backend para Gestor de Finanzas Personales con IA",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "clean": "rm -rf dist"
+   "dev": "nodemon --exec ts-node src/server.ts",
+  "build": "tsc",
+  "start": "node dist/server.js",
+  "test": "vitest",
+  "test:run": "vitest run",
+  "clean": "rm -rf dist"
   },
   "keywords": [
     "finanzas",
@@ -26,12 +28,15 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.9.0",
+    "@types/node": "^25.9.1",
     "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }
